@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PRECIO_SALCHICHA 629.5
-#define PRECIO_HAMBURGUESA 1450
-
+#define PRECIO_SALCHICHA 340
+#define PRECIO_HAMBURGUESA 1349
 #define ID_SALCHICHA 101
 #define ID_HAMBURGUESA 102
+
+#define LOG_DIR "log.txt"
+#define PEDIDOS_DIR "pedidos.txt"
 
 typedef struct {
     int id;
@@ -17,22 +19,23 @@ typedef struct {
 
 typedef struct {
     int id; // Comenzando desde 0
-    char cliente[30]; // Nombre
+    char cliente[30];
     producto salchicha;
     producto hamburguesa;
 } Pedido;
 
-typedef struct Elemento { // Lista enlazada
+typedef struct Elemento {
     Pedido pedido;
     struct Elemento * siguiente;
 } Nodo;
 
-// Definición de funciones --------------------------- NOTA 💀: No todas tienen que ser Void, eso cambienlo ustedes muchachos
-void ingresarPedido(char *nombreArchivo, Nodo **head, int *ptrCantPedidos, int *ptrPreparandose,int *cantSalchichas, int *cantHamburguesas); // NOTA 💀: No es sintácticamente posible en C hacer las estructuras genéricas con pre-valores (como meterle los productos pre armasdos a 'pedido'). Así que Agus, cagaste, vas a tener que añadir los 'precios', 'nombres' e 'IDs' de los productos al momento de declarar 'Pedido' al iniciar esta función
+//TODO RENAME HEAD->CABEZA
+Pedido * configurarCatalogo(Pedido * pedidoSemilla);
+int resetearLog();
+void ingresarPedido(Nodo **head, Pedido * pedidoSemilla, int *ptrCantPedidos, int *ptrPreparandose, int *cantSalchichas, int *cantHamburguesas);
 void finalizarPedido(Nodo **head, int *ptrPreparandose);
-void emitirReporte(char *nombreArchivo, Nodo *head, int *ptrPreparandose);
-void guardarDatosVentas(char *nombreArchivo, int *cantHamburguesas, int *cantSalchichas);
-//guardarPedido
+void emitirReporte(Nodo *head, int *ptrPreparandose);
+void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas);
 void salir();
 
 Nodo * crearNodo(Pedido pedido);
@@ -42,20 +45,27 @@ int eliminarPedido(Nodo ** head, int id);
 
 int main() {
     Nodo *head = NULL;
-    char nombreArchivo[10] = "log.txt";
-    int op = 0, cantPedidos = 0, preparandose = 0, cantSalchichas = 0, cantHamburguesas = 0;
+    int opcion=0, cantPedidos=0, preparandose=0, cantSalchichas=0, cantHamburguesas=0;
 
     int *ptrCantPedidos = &cantPedidos, *ptrPreparandose = &preparandose;
     int *ptrCantSalchichas = &cantSalchichas, *ptrCantHamburguesas = &cantHamburguesas;
 
-    // Creación/limpieza del archivo 'log.txt'
-    FILE * archivo = fopen(nombreArchivo, "w");
-    if (archivo == NULL) {
-        printf("ERROR: No se pudo abrir el archivo log.txt...");
+    if(resetearLog() == 1) {
         return EXIT_FAILURE;
     }
-    fclose(archivo);
 
+    Pedido * pedidoSemilla = NULL, * aux = NULL;
+    aux = configurarCatalogo(pedidoSemilla);
+    if (aux == NULL) {
+        printf("MEMORY ERROR: Error al asignar espacio en memoria. funcion:['main']\n");
+        printf("La semilla del catalogo no se ha podido crear.\n");
+        return EXIT_FAILURE;
+    }
+
+    pedidoSemilla = aux;
+
+    printf("----------------------------------------\n----------Bienvenido a GordSys----------\n----------------------------------------\n");
+    system("pause");
     do {
         system("cls");
         printf("Menu de Opciones: (Pedidos en preparacion: %d)", preparandose);
@@ -64,20 +74,19 @@ int main() {
         printf("\n\t3) Emitir reporte");
         printf("\n\t4) Salir");
 
-        printf("\nSeleccione alguna de las opciones: ");
-        scanf("%d", &op);
+        printf("\n\nSeleccione alguna de las opciones: ");
+        scanf("%d", &opcion);
 
         system("cls");
-        switch (op) {
+        switch (opcion) {
             case 1:
-                /* ingresarPedido(&head, &cantPedidos, &preparandose, &cantSalchichas, &cantHamburguesas); */ // Che pa, haciendo esto nos ahorramos 4 variables 😎
-                ingresarPedido(nombreArchivo, &head, ptrCantPedidos, ptrPreparandose, ptrCantSalchichas, ptrCantHamburguesas);
+                ingresarPedido(&head, pedidoSemilla, ptrCantPedidos, ptrPreparandose, ptrCantSalchichas, ptrCantHamburguesas);
                 break;
             case 2:
                 finalizarPedido(&head, ptrPreparandose);
                 break;
             case 3:
-                emitirReporte(nombreArchivo, head, ptrPreparandose);
+                emitirReporte(head, ptrPreparandose);
                 break;
             case 4:
                 salir();
@@ -88,63 +97,86 @@ int main() {
         }
         printf("\n");
         system("pause");
-    } while (op != 4);
+    } while (opcion != 4);
 
     return EXIT_SUCCESS;
 }
 
-void ingresarPedido(char *nombreArchivo, Nodo **head, int *ptrCantPedidos, int *ptrPreparandose, int *cantSalchichas, int *cantHamburguesas) {
-    char opcion[2];
-    int menuopt=0, flag=0, bufferSalchichas = 0, bufferHamburguesas = 0;
+int resetearLog() {
+    FILE * archivo = fopen(LOG_DIR, "w");
+    if (archivo == NULL) {
+        printf("ERROR: No se pudo abrir el archivo log.txt...");
+        system("pause");
+        return EXIT_FAILURE;
+    }
 
-    Pedido * nuevoPedido = NULL, *aux = NULL;
+    fclose(archivo);
+    return 0;
+}
+
+Pedido * configurarCatalogo(Pedido * pedidoSemilla) {
+    
+    Pedido *aux = NULL;
     aux = (Pedido *) malloc(sizeof(Pedido));
 
     if (aux == NULL) {
-        printf("MEMORY ERROR: Error al asignar espacio en memoria. funcion:['ingresarPedido']\n");
-        printf("El pedido no se ha podido cargar\n");
+        printf("MEMORY ERROR: Error al asignar espacio en memoria. funcion:['configurarPrograma']\n");
+        printf("La semilla del catalogo no se ha podido crear.\n");
         system("pause");
-        return;
+        return NULL;
     }
 
-    nuevoPedido = aux;
+    pedidoSemilla = aux;
 
-    // Def datos productos
-    nuevoPedido->salchicha.id = ID_SALCHICHA;
-    strcpy(nuevoPedido->salchicha.nombre, "Salchicha");
-    nuevoPedido->salchicha.precio = PRECIO_SALCHICHA;
-    nuevoPedido->salchicha.cantidad = 0;
+    // Definicion del catalogo de productos
+    pedidoSemilla->salchicha.id = ID_SALCHICHA;
+    strcpy(pedidoSemilla->salchicha.nombre, "Salchicha");
+    pedidoSemilla->salchicha.precio = PRECIO_SALCHICHA;
+    pedidoSemilla->salchicha.cantidad = 0;
 
-    nuevoPedido->hamburguesa.id = ID_HAMBURGUESA;
-    strcpy(nuevoPedido->hamburguesa.nombre, "Hamburguesa XXL");
-    nuevoPedido->hamburguesa.precio = PRECIO_HAMBURGUESA;
-    nuevoPedido->hamburguesa.cantidad = 0;
+    pedidoSemilla->hamburguesa.id = ID_HAMBURGUESA;
+    strcpy(pedidoSemilla->hamburguesa.nombre, "Hamburguesa XXL");
+    pedidoSemilla->hamburguesa.precio = PRECIO_HAMBURGUESA;
+    pedidoSemilla->hamburguesa.cantidad = 0;
 
-    nuevoPedido->id = ptrCantPedidos + 1;
+    return pedidoSemilla;
+
+}
+
+void ingresarPedido(Nodo **head, Pedido * nuevoPedido, int *ptrCantPedidos, int *ptrPreparandose, int *cantSalchichas, int *cantHamburguesas) {
+    char opcion[2];
+    int opcionMenu=0, flag=0, bufferSalchichas=0, bufferHamburguesas=0;
 
     printf("Ingrese el nombre de quien es el pedido: ");
     fflush(stdin);
     gets(nuevoPedido->cliente);
+    system("cls");
+
+    nuevoPedido->id = *ptrCantPedidos + 1;
+    nuevoPedido->salchicha.cantidad = 0;
+    nuevoPedido->hamburguesa.cantidad = 0;
 
     do {
         printf("1) Agregar salchicha/s al pedido\n2) Agregar hamburguesa/s al pedido\n");
         printf("Ingrese una opcion: ");
-        scanf("%d", &menuopt);
+        scanf("%d", &opcionMenu);
         flag = 0;
 
-        switch (menuopt) {
+        switch(opcionMenu) {
             case 1:
-                flag=1;
+                system("cls");
                 printf("Ingrese la cantidad de salchichas: ");
                 scanf("%d", &bufferSalchichas);
                 nuevoPedido->salchicha.cantidad += bufferSalchichas;
+                flag=1;
                 break;
             
             case 2:
-                flag=1;
+                system("cls");
                 printf("Ingrese la cantidad de hamburguesas: ");
                 scanf("%d", &bufferHamburguesas);
                 nuevoPedido->hamburguesa.cantidad += bufferHamburguesas;
+                flag=1;
                 break;
             
             default:
@@ -157,30 +189,31 @@ void ingresarPedido(char *nombreArchivo, Nodo **head, int *ptrCantPedidos, int *
             printf("Desea ingresar mas productos al pedido? S/N: ");
             fflush(stdin);
             gets(opcion);
+            system("cls");
         }
     } while (strcasecmp(opcion, "s") == 0);
 
-    if(insertarFinal(head, *nuevoPedido) == 1) {
+    if (insertarFinal(head, *nuevoPedido) == 1) {
         printf("ERROR: No se pudo crear el pedido. funcion:['ingresarPedido']\n");
         system("pause");
         return;
     }
 
-    guardarDatosVentas(nombreArchivo, &nuevoPedido->hamburguesa.cantidad, &nuevoPedido->salchicha.cantidad);
-
     *cantSalchichas += nuevoPedido->salchicha.cantidad;
     *cantHamburguesas += nuevoPedido->hamburguesa.cantidad;
     ++(*ptrCantPedidos);
     ++(*ptrPreparandose);
+
+    guardarDatosVentas(cantSalchichas, cantHamburguesas);
     
-    printf("\nPedido cargado correctamente!");
+    printf("Pedido cargado correctamente!");
     return;
 }
 
 void finalizarPedido(Nodo **head, int *ptrPreparandose) {}
 
-void emitirReporte(char *nombreArchivo, Nodo *head, int *ptrPreparandose) { // Incompleta
-    FILE * archivo = fopen(nombreArchivo, "r");
+void emitirReporte(Nodo *head, int *ptrPreparandose) { // Incompleta
+    FILE * archivo = fopen(LOG_DIR, "r");
     char texto[100];
     
     printf("Reporte del dia\n");
@@ -199,11 +232,12 @@ void emitirReporte(char *nombreArchivo, Nodo *head, int *ptrPreparandose) { // I
     fclose(archivo);
 }
 
-void guardarDatosVentas(char *nombreArchivo, int *cantHamburguesas, int *cantSalchichas) {
-    FILE * archivo = fopen(nombreArchivo, "w");
+void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas) {
+    FILE * archivo = fopen(LOG_DIR, "w");
     
     if (archivo == NULL) {
         printf("ERROR: No se pudo abrir el archivo log.txt...");
+        system("pause");
         return;
     }
 
@@ -216,6 +250,7 @@ void guardarDatosVentas(char *nombreArchivo, int *cantHamburguesas, int *cantSal
     // TODO CAMBIO DE IMPRESIÓN
 
     fclose(archivo);
+    return;
 }
 
 Nodo * crearNodo(Pedido pedido) {
@@ -273,7 +308,7 @@ int eliminarPedido(Nodo ** head, int id) {
     actual = *head;
     if (actual == NULL) {
         printf("No se puede eliminar el pedido porque lista esta vacias. funcion:['eliminarNodo']\n");
-        return;
+        return -1;
     } 
 
     if (actual->pedido.id == id) { //Si el que deseo eliminar es cabeza, reasigno cabeza al siguiente.
