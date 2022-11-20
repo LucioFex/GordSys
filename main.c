@@ -9,6 +9,7 @@
 
 #define LOG_DIR "log.txt"
 #define PEDIDOS_DIR "pedidosEntregados.txt"
+#define BIN_DIR "estadoProductos.bin"
 
 typedef struct {
     int id;
@@ -24,15 +25,24 @@ typedef struct {
     producto hamburguesa;
 } Pedido;
 
+typedef struct { // Struct para almacenar datos en archivo binario
+    int cantPedidos;
+    int pedidosPreparandose;
+    int productosEntregados;
+    int productosPreparandose;
+    int cantSalchichas;
+    int cantHamburguesas;
+} EstadoProductos;
+
 typedef struct Elemento {
     Pedido pedido;
     struct Elemento * siguiente;
 } Nodo;
 
 //TODO RENAME HEAD->CABEZA
-void ingresarPedido(Nodo **head, Pedido * pedidoSemilla, int *ptrCantPedidos, int *ptrPreparandose, int *cantSalchichas, int *cantHamburguesas);
-void finalizarPedido(Nodo **head, int *ptrPreparandose);
-void emitirReporte(Nodo *head, int *ptrPreparandose);
+void ingresarPedido(Nodo **head, Pedido *pedidoSemilla, EstadoProductos *estadoProductos);
+void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos);
+void emitirReporte(EstadoProductos *estadoProductos);
 int salir();
 
 //HELPERS
@@ -44,15 +54,24 @@ void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas);
 int mostrarPedidos(Nodo * head);
 Nodo * buscarPedido(Nodo * head, int id) ;
 void eliminarPedido(Nodo ** head, int id);
+void cargarDatosIniciales(char *nombreArchivo, EstadoProductos *estadoProductos); // Datos del día en el binario
+void actualizarDatosBin(char *nombreArchivo, EstadoProductos *estadoProductos);
 
 int main() {
     Nodo *head = NULL;
-    int opcion=0, cantPedidos=0, preparandose=0, cantSalchichas=0, cantHamburguesas=0, flag=0;
+    EstadoProductos * estadoProductos = NULL;
+    int opcion=0, flag=0;
 
-    int *ptrCantPedidos = &cantPedidos, *ptrPreparandose = &preparandose;
-    int *ptrCantSalchichas = &cantSalchichas, *ptrCantHamburguesas = &cantHamburguesas;
+    // Asignación de memoria dinámica
+    estadoProductos = (EstadoProductos*)malloc(sizeof(*estadoProductos));
+    if (estadoProductos == NULL) {
+        printf("ERROR: Al asignar espacio en memoria. funcion:['main']\n");
+        return EXIT_FAILURE;
+    }
 
-    if(resetearLog() == 1) {
+    cargarDatosIniciales(BIN_DIR, estadoProductos);
+
+    if (resetearLog() == 1) {
         return EXIT_FAILURE;
     }
 
@@ -70,7 +89,7 @@ int main() {
     system("pause");
     do {
         system("cls");
-        printf("Menu de Opciones: (Pedidos en preparacion: %d)", preparandose);
+        printf("Menu de Opciones: (Pedidos en preparacion: %d)", estadoProductos->pedidosPreparandose);
         printf("\n\t1) Ingresar pedido");
         printf("\n\t2) Finalizar pedido");
         printf("\n\t3) Emitir reporte");
@@ -82,13 +101,15 @@ int main() {
         system("cls");
         switch (opcion) {
             case 1:
-                ingresarPedido(&head, pedidoSemilla, ptrCantPedidos, ptrPreparandose, ptrCantSalchichas, ptrCantHamburguesas);
+                ingresarPedido(&head, pedidoSemilla, estadoProductos);
+                actualizarDatosBin(BIN_DIR, estadoProductos);
                 break;
             case 2:
-                finalizarPedido(&head, ptrPreparandose);
+                finalizarPedido(&head, estadoProductos);
+                actualizarDatosBin(BIN_DIR, estadoProductos);
                 break;
             case 3:
-                emitirReporte(head, ptrPreparandose);
+                emitirReporte(estadoProductos);
                 break;
             case 4:
                 flag = salir();
@@ -105,7 +126,7 @@ int main() {
 }
 
 
-void ingresarPedido(Nodo **head, Pedido * nuevoPedido, int *ptrCantPedidos, int *ptrPreparandose, int *cantSalchichas, int *cantHamburguesas) {
+void ingresarPedido(Nodo **head, Pedido * nuevoPedido, EstadoProductos *estadoProductos) {
     char opcion[2];
     int opcionMenu=0, flag=0, bufferSalchichas=0, bufferHamburguesas=0;
 
@@ -114,7 +135,7 @@ void ingresarPedido(Nodo **head, Pedido * nuevoPedido, int *ptrCantPedidos, int 
     gets(nuevoPedido->cliente);
     system("cls");
 
-    nuevoPedido->id = *ptrCantPedidos + 1;
+    nuevoPedido->id = estadoProductos->cantPedidos + 1;
     nuevoPedido->salchicha.cantidad = 0;
     nuevoPedido->hamburguesa.cantidad = 0;
 
@@ -161,19 +182,21 @@ void ingresarPedido(Nodo **head, Pedido * nuevoPedido, int *ptrCantPedidos, int 
         return;
     }
 
-    *cantSalchichas += nuevoPedido->salchicha.cantidad;
-    *cantHamburguesas += nuevoPedido->hamburguesa.cantidad;
-    ++(*ptrCantPedidos);
-    ++(*ptrPreparandose);
+    estadoProductos->cantSalchichas += nuevoPedido->salchicha.cantidad;
+    estadoProductos->cantHamburguesas += nuevoPedido->hamburguesa.cantidad;
+    estadoProductos->productosPreparandose += nuevoPedido->salchicha.cantidad + nuevoPedido->hamburguesa.cantidad;
 
-    guardarDatosVentas(cantSalchichas, cantHamburguesas);
+    estadoProductos->cantPedidos += 1;
+    estadoProductos->pedidosPreparandose += 1;
+
+    guardarDatosVentas(&estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
     
     printf("Pedido cargado correctamente!");
     return;
 }
 
-void finalizarPedido(Nodo **head, int *ptrPreparandose) {
-    int flag=0, busquedaId=0;
+void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
+    int flag=0, busquedaId=0, prodsVendidos = 0;
     Nodo * pedido = NULL;
     FILE * archivo = NULL;
 
@@ -205,32 +228,23 @@ void finalizarPedido(Nodo **head, int *ptrPreparandose) {
     fprintf(archivo, "\nHamburguesas: %d a $%.2f c/u\n\n", pedido->pedido.hamburguesa.cantidad, pedido->pedido.hamburguesa.precio);
     fclose(archivo);
 
-    //Luego de guardar el pedido en el registro, lo elimino de la lista.
+    prodsVendidos = pedido->pedido.salchicha.cantidad + pedido->pedido.hamburguesa.cantidad;
+
+    // Luego de guardar el pedido en el registro, lo elimino de la lista.
     eliminarPedido(head, busquedaId);
-    *ptrPreparandose = *ptrPreparandose - 1;
+
+    estadoProductos->pedidosPreparandose -= 1;
+    estadoProductos->productosPreparandose -= prodsVendidos;
+    estadoProductos->productosEntregados += prodsVendidos;
+
     system("cls");
     printf("Pedido finalizado con exito!");
     return;
 }
 
-void emitirReporte(Nodo *head, int *ptrPreparandose) { // Incompleta
-    FILE * archivo = fopen(LOG_DIR, "r");
-    char texto[100];
-    
-    printf("Reporte del dia\n");
-
-    if (archivo == NULL) {
-        printf("ERROR: No se pudo abrir el archivo log.txt...");
-        return;
-    }
-
-    fscanf(archivo, " %[^\n]", texto);
-    while (!feof(archivo)) {
-        printf("%s\n", texto);
-        fscanf(archivo, " %[^\n]", texto);
-    }
-
-    fclose(archivo);
+void emitirReporte(EstadoProductos *estadoProductos) { 
+    printf("Cantidad de productos en preparacion: %d\n", estadoProductos->productosPreparandose);
+    printf("Cantidad de productos entegados: %d", estadoProductos->productosEntregados);
 }
 
 
@@ -253,6 +267,46 @@ int salir() {
 
 //HELPERS - HELPERS -HELPERS - HELPERS
 
+void cargarDatosIniciales(char *nombreArchivo, EstadoProductos *estadoProductos) {
+    FILE * bin = fopen(nombreArchivo, "rb");
+
+    if (bin == NULL) { // Archivo no existe / primera vez que se abre negocio en el día
+        printf("\nNo existe BIN");
+        fclose(bin);
+        bin = fopen(nombreArchivo, "wb");
+
+        estadoProductos->cantPedidos = 0;
+        estadoProductos->pedidosPreparandose = 0;
+        estadoProductos->productosEntregados = 0;
+        estadoProductos->productosPreparandose = 0;
+        estadoProductos->cantSalchichas = 0;
+        estadoProductos->cantHamburguesas = 0;
+
+        fwrite(estadoProductos, sizeof(*estadoProductos), 1, bin);
+        fclose(bin);
+        return;
+    }
+
+    // Si el archivo ya existe, se guardan todos sus datos en "estadoProductos"
+    printf("\nSi existe BIN");
+    fread(estadoProductos, sizeof(*estadoProductos), 1, bin);
+    fclose(bin);
+} 
+
+void actualizarDatosBin(char *nombreArchivo, EstadoProductos *estadoProductos) {
+    /* Se guardan todos los datos de la estructura 'estadoProductos' en binario*/
+    FILE * bin = fopen(nombreArchivo, "wb");
+
+    if (bin == NULL) { // Validación 
+        printf("ERROR: No se han podido almacenar los datos en archivo BackUp. funcion:['actualizarDatosBin']");
+        return;
+    }
+
+    printf("\nGUARDANDO en bin");
+    fwrite(estadoProductos, sizeof(*estadoProductos), 1, bin);
+    fclose(bin);
+}
+
 int resetearLog() {
     FILE * archivo = fopen(LOG_DIR, "w");
     if (archivo == NULL) {
@@ -266,7 +320,6 @@ int resetearLog() {
 }
 
 Pedido * configurarCatalogo(Pedido * pedidoSemilla) {
-    
     Pedido *aux = NULL;
     aux = (Pedido *) malloc(sizeof(Pedido));
 
@@ -351,13 +404,11 @@ void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas) {
         return;
     }
 
-    fprintf(archivo, "Cantidad de Salchichas vendidas: %d\n", *cantSalchichas);
-    fprintf(archivo, "Cantidad de Hamburguesas vendidas: %d\n", *cantHamburguesas);
+    int productosVendidos = *cantSalchichas + *cantHamburguesas;
+    float dineroFacturado = (float)(*cantSalchichas * PRECIO_SALCHICHA + *cantHamburguesas * PRECIO_HAMBURGUESA);
 
-    fprintf(archivo, "SubTotal facturado en Salchichas: %.2f\n", (float)(*cantSalchichas * PRECIO_SALCHICHA));
-    fprintf(archivo, "SubTotal facturado en Hamburguesas: %.2f\n", (float)(*cantHamburguesas * PRECIO_HAMBURGUESA));
-
-    // TODO CAMBIO DE IMPRESIÓN
+    fprintf(archivo, "Cantidad de productos vendidos: %d\n", productosVendidos);
+    fprintf(archivo, "Cantidad de dinero facturado: %.2f", dineroFacturado);
 
     fclose(archivo);
     return;
