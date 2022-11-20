@@ -9,7 +9,7 @@
 
 #define LOG_DIR "log.txt"
 #define PEDIDOS_DIR "pedidosEntregados.txt"
-#define BIN_DIR "estadoProductos.bin"
+#define ESTADO_DIR "estadoProductos.bin"
 
 typedef struct {
     int id;
@@ -46,7 +46,7 @@ void emitirReporte(EstadoProductos *estadoProductos);
 int salir();
 
 //HELPERS
-int resetearLog();
+// int resetearLog();
 Pedido * configurarCatalogo(Pedido * pedidoSemilla);
 Nodo * crearNodo(Pedido pedido);
 int insertarFinal(Nodo **head, Pedido datos);
@@ -69,11 +69,11 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    cargarDatosIniciales(BIN_DIR, estadoProductos);
+    cargarDatosIniciales(ESTADO_DIR, estadoProductos);
 
-    if (resetearLog() == 1) {
-        return EXIT_FAILURE;
-    }
+    // if (resetearLog() == 1) {
+    //     return EXIT_FAILURE;
+    // }
 
     Pedido * pedidoSemilla = NULL, * aux = NULL;
     aux = configurarCatalogo(pedidoSemilla);
@@ -102,11 +102,12 @@ int main() {
         switch (opcion) {
             case 1:
                 ingresarPedido(&head, pedidoSemilla, estadoProductos);
-                actualizarDatosBin(BIN_DIR, estadoProductos);
+                guardarDatosVentas(&estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
+                actualizarDatosBin(ESTADO_DIR, estadoProductos);
                 break;
             case 2:
                 finalizarPedido(&head, estadoProductos);
-                actualizarDatosBin(BIN_DIR, estadoProductos);
+                actualizarDatosBin(ESTADO_DIR, estadoProductos);
                 break;
             case 3:
                 emitirReporte(estadoProductos);
@@ -125,7 +126,6 @@ int main() {
     return EXIT_SUCCESS;
 }
 
-
 void ingresarPedido(Nodo **head, Pedido * nuevoPedido, EstadoProductos *estadoProductos) {
     char opcion[2];
     int opcionMenu=0, flag=0, bufferSalchichas=0, bufferHamburguesas=0;
@@ -135,6 +135,7 @@ void ingresarPedido(Nodo **head, Pedido * nuevoPedido, EstadoProductos *estadoPr
     gets(nuevoPedido->cliente);
     system("cls");
 
+    // TODO: Refactorizar a Pedido *nuevopedido para ser utilizado sin resetear valores
     nuevoPedido->id = estadoProductos->cantPedidos + 1;
     nuevoPedido->salchicha.cantidad = 0;
     nuevoPedido->hamburguesa.cantidad = 0;
@@ -189,8 +190,6 @@ void ingresarPedido(Nodo **head, Pedido * nuevoPedido, EstadoProductos *estadoPr
     estadoProductos->cantPedidos += 1;
     estadoProductos->pedidosPreparandose += 1;
 
-    guardarDatosVentas(&estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
-    
     printf("Pedido cargado correctamente!");
     return;
 }
@@ -200,8 +199,8 @@ void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
     Nodo * pedido = NULL;
     FILE * archivo = NULL;
 
-    if(mostrarPedidos(*head) == 1) {
-        printf("No hay pedidos realizandose en este momento.\n"); //Valido que la lista no este vacia
+    if (mostrarPedidos(*head) == 1) {
+        printf("No hay pedidos realizandose en este momento.\n"); // Valido que la lista no este vacia
         return;
     }
 
@@ -209,13 +208,13 @@ void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
     scanf("%d", &busquedaId);
 
     pedido = buscarPedido(*head, busquedaId);
-    if(pedido == NULL) {
+    if (pedido == NULL) {
         printf("No se encontro el pedido especificado");
         system("pause");
         return;
     }
     
-    //Si se encontro un pedido con ese ID, guardo los datos de la venta antes de eliminarlos de la lista
+    // Si se encontro un pedido con ese ID, guardo los datos de la venta antes de eliminarlos de la lista
     archivo = fopen(PEDIDOS_DIR, "a");
     if(archivo == NULL) {
         printf("\nEl archivo pedidosEntregados.txt no se pudo abrir.");
@@ -231,7 +230,7 @@ void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
     prodsVendidos = pedido->pedido.salchicha.cantidad + pedido->pedido.hamburguesa.cantidad;
 
     // Luego de guardar el pedido en el registro, lo elimino de la lista.
-    eliminarPedido(head, busquedaId);
+    eliminarPedido(head, busquedaId); // TODO: Añadir validación para cuando no se puede eliminar
 
     estadoProductos->pedidosPreparandose -= 1;
     estadoProductos->productosPreparandose -= prodsVendidos;
@@ -242,11 +241,12 @@ void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
     return;
 }
 
-void emitirReporte(EstadoProductos *estadoProductos) { 
+void emitirReporte(EstadoProductos *estadoProductos) {
+    // TODO: Añadir validación para productos
+    printf("Reporte del Dia:\n");
     printf("Cantidad de productos en preparacion: %d\n", estadoProductos->productosPreparandose);
     printf("Cantidad de productos entegados: %d", estadoProductos->productosEntregados);
 }
-
 
 int salir() {
     char respuesta[2];
@@ -264,14 +264,12 @@ int salir() {
     return 0;
 }
 
-
 //HELPERS - HELPERS -HELPERS - HELPERS
 
 void cargarDatosIniciales(char *nombreArchivo, EstadoProductos *estadoProductos) {
     FILE * bin = fopen(nombreArchivo, "rb");
 
     if (bin == NULL) { // Archivo no existe / primera vez que se abre negocio en el día
-        printf("\nNo existe BIN");
         fclose(bin);
         bin = fopen(nombreArchivo, "wb");
 
@@ -288,7 +286,6 @@ void cargarDatosIniciales(char *nombreArchivo, EstadoProductos *estadoProductos)
     }
 
     // Si el archivo ya existe, se guardan todos sus datos en "estadoProductos"
-    printf("\nSi existe BIN");
     fread(estadoProductos, sizeof(*estadoProductos), 1, bin);
     fclose(bin);
 } 
@@ -297,27 +294,27 @@ void actualizarDatosBin(char *nombreArchivo, EstadoProductos *estadoProductos) {
     /* Se guardan todos los datos de la estructura 'estadoProductos' en binario*/
     FILE * bin = fopen(nombreArchivo, "wb");
 
-    if (bin == NULL) { // Validación 
+    if (bin == NULL) { // Validación
         printf("ERROR: No se han podido almacenar los datos en archivo BackUp. funcion:['actualizarDatosBin']");
+        system("pause");
         return;
     }
 
-    printf("\nGUARDANDO en bin");
     fwrite(estadoProductos, sizeof(*estadoProductos), 1, bin);
     fclose(bin);
 }
 
-int resetearLog() {
-    FILE * archivo = fopen(LOG_DIR, "w");
-    if (archivo == NULL) {
-        printf("ERROR: No se pudo abrir el archivo log.txt...");
-        system("pause");
-        return EXIT_FAILURE;
-    }
+// int resetearLog() {
+//     FILE * archivo = fopen(LOG_DIR, "w");
+//     if (archivo == NULL) {
+//         printf("ERROR: No se pudo abrir el archivo log.txt...");
+//         system("pause");
+//         return EXIT_FAILURE;
+//     }
 
-    fclose(archivo);
-    return 0;
-}
+//     fclose(archivo);
+//     return 0;
+// }
 
 Pedido * configurarCatalogo(Pedido * pedidoSemilla) {
     Pedido *aux = NULL;
@@ -380,7 +377,7 @@ int insertarFinal(Nodo **head, Pedido nuevoPedido) {
     } 
 
     // Recorre la lista el ultimo nodo, osea, hasta el final, para poder colocar el nuevo nodo
-    for (;ultimo->siguiente;) { 
+    for (;ultimo->siguiente;) {
         ultimo=ultimo->siguiente;
     }
     
@@ -391,7 +388,7 @@ int insertarFinal(Nodo **head, Pedido nuevoPedido) {
         return 1;
     }
 
-    ultimo->siguiente = crearNodo(nuevoPedido); 
+    ultimo->siguiente = crearNodo(nuevoPedido);
     return 0;
 }
 
@@ -418,7 +415,7 @@ int mostrarPedidos(Nodo * head) {
     Nodo * actual=NULL;
     actual = head;
 
-    if(actual == NULL) {
+    if (actual == NULL) {
         return 1;
     }
 
@@ -430,11 +427,11 @@ int mostrarPedidos(Nodo * head) {
         printf("\nCliente: %s", actual->pedido.cliente);
 
         if (actual->pedido.salchicha.cantidad != 0) {
-           printf("\nSalchichas: %d", actual->pedido.salchicha.cantidad);
+            printf("\nSalchichas: %d", actual->pedido.salchicha.cantidad);
         }
 
         if (actual->pedido.hamburguesa.cantidad != 0) {
-           printf("\nHamburguesas: %d", actual->pedido.hamburguesa.cantidad);
+            printf("\nHamburguesas: %d", actual->pedido.hamburguesa.cantidad);
         }
         
         actual = actual->siguiente;
@@ -463,19 +460,17 @@ void eliminarPedido(Nodo ** head, int id) {
     Nodo * actual=NULL;
 
     actual = *head;
-    if (actual->pedido.id == id) { //Si el que deseo eliminar es cabeza, reasigno cabeza al siguiente.
+    if (actual->pedido.id == id) { // Si el que deseo eliminar es cabeza, reasigno cabeza al siguiente.
         *head = actual->siguiente;
         free(actual);
     } else {
         for(;actual->siguiente;) {
-            if (actual->siguiente->pedido.id == id) { //ya parto buscando desde la 2da pos, la 1ra ya fue revisada.
-                actual->siguiente = actual->siguiente->siguiente; //Si el nodo sucesor tiene el id que busco, hago que el nodo actual apunte al siguiente del siguiente, osea lo saltea, elimininandolo del enlace.
+            if (actual->siguiente->pedido.id == id) { // ya parto buscando desde la 2da pos, la 1ra ya fue revisada.
+                actual->siguiente = actual->siguiente->siguiente; // Si el nodo sucesor tiene el id que busco, hago que el nodo actual apunte al siguiente del siguiente, osea lo saltea, elimininandolo del enlace.
                 free(actual->siguiente);
                 break;
             }
             actual = actual->siguiente;
         }
     }
-
-    return;
 }
