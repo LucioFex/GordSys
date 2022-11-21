@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <sys/stat.h>
 
 #define PRECIO_SALCHICHA 340
 #define PRECIO_HAMBURGUESA 1349
 #define ID_SALCHICHA 101
 #define ID_HAMBURGUESA 102
-
-#define LOG_DIR "log.txt"
-#define PEDIDOS_DIR "pedidosEntregados.txt"
-#define ESTADO_DIR "estadoProductos.bin"
 
 typedef struct {
     int id;
@@ -41,26 +39,28 @@ typedef struct Elemento {
 
 //TODO RENAME HEAD->CABEZA
 void ingresarPedido(Nodo **head, Pedido *pedidoSemilla, EstadoProductos *estadoProductos);
-void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos);
+void finalizarPedido(char *path, Nodo **head, EstadoProductos *estadoProductos);
 void emitirReporte(EstadoProductos *estadoProductos);
 int salir();
 
 //HELPERS
-// int resetearLog();
 Pedido * configurarCatalogo(Pedido * pedidoSemilla);
 Nodo * crearNodo(Pedido pedido);
 int insertarFinal(Nodo **head, Pedido datos);
-void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas);
+void guardarDatosVentas(char *path, int *cantSalchichas, int *cantHamburguesas);
 int mostrarPedidos(Nodo * head);
 Nodo * buscarPedido(Nodo * head, int id) ;
 void eliminarPedido(Nodo ** head, int id);
 void cargarDatosIniciales(char *nombreArchivo, EstadoProductos *estadoProductos); // Datos del día en el binario
 void actualizarDatosBin(char *nombreArchivo, EstadoProductos *estadoProductos);
+void fechaActual(char *fecha);
+void gestionDir(char *logDir, char *pedidosDir, char *estadoDir);
 
 int main() {
     Nodo *head = NULL;
-    EstadoProductos * estadoProductos = NULL;
     int opcion=0, flag=0;
+    EstadoProductos * estadoProductos = NULL;
+    char logDir[60], pedidosDir[60], estadoDir[60];
 
     // Asignación de memoria dinámica
     estadoProductos = (EstadoProductos*)malloc(sizeof(*estadoProductos));
@@ -69,11 +69,8 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    cargarDatosIniciales(ESTADO_DIR, estadoProductos);
-
-    // if (resetearLog() == 1) {
-    //     return EXIT_FAILURE;
-    // }
+    gestionDir(logDir, pedidosDir, estadoDir);
+    cargarDatosIniciales(estadoDir, estadoProductos);
 
     Pedido * pedidoSemilla = NULL, * aux = NULL;
     aux = configurarCatalogo(pedidoSemilla);
@@ -102,12 +99,12 @@ int main() {
         switch (opcion) {
             case 1:
                 ingresarPedido(&head, pedidoSemilla, estadoProductos);
-                guardarDatosVentas(&estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
-                actualizarDatosBin(ESTADO_DIR, estadoProductos);
+                guardarDatosVentas(logDir, &estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
+                actualizarDatosBin(estadoDir, estadoProductos);
                 break;
             case 2:
-                finalizarPedido(&head, estadoProductos);
-                actualizarDatosBin(ESTADO_DIR, estadoProductos);
+                finalizarPedido(pedidosDir, &head, estadoProductos);
+                actualizarDatosBin(estadoDir, estadoProductos);
                 break;
             case 3:
                 emitirReporte(estadoProductos);
@@ -194,7 +191,7 @@ void ingresarPedido(Nodo **head, Pedido * nuevoPedido, EstadoProductos *estadoPr
     return;
 }
 
-void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
+void finalizarPedido(char *path, Nodo **head, EstadoProductos *estadoProductos) {
     int flag=0, busquedaId=0, prodsVendidos = 0;
     Nodo * pedido = NULL;
     FILE * archivo = NULL;
@@ -215,8 +212,8 @@ void finalizarPedido(Nodo **head, EstadoProductos *estadoProductos) {
     }
     
     // Si se encontro un pedido con ese ID, guardo los datos de la venta antes de eliminarlos de la lista
-    archivo = fopen(PEDIDOS_DIR, "a");
-    if(archivo == NULL) {
+    archivo = fopen(path, "a");
+    if (archivo == NULL) {
         printf("\nEl archivo pedidosEntregados.txt no se pudo abrir.");
         system("pause");
         return;
@@ -304,17 +301,36 @@ void actualizarDatosBin(char *nombreArchivo, EstadoProductos *estadoProductos) {
     fclose(bin);
 }
 
-// int resetearLog() {
-//     FILE * archivo = fopen(LOG_DIR, "w");
-//     if (archivo == NULL) {
-//         printf("ERROR: No se pudo abrir el archivo log.txt...");
-//         system("pause");
-//         return EXIT_FAILURE;
-//     }
+void fechaActual(char *dir) {
+    /* Formatea un String con la fecha actual */
+    time_t tiempo = time(NULL);
+    struct tm tm = *localtime(&tiempo);
 
-//     fclose(archivo);
-//     return 0;
-// }
+    // Se actualiza la variable "dir" con los datos del día de hoy
+    // %d-%02d-%02d
+    sprintf(dir, "./registros/log-%02d-%02d-%d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900); 
+}
+
+void gestionDir(char *logDir, char *pedidosDir, char *estadoDir) {
+    /* Asigna una caperta en 'registro' para el día actual, para almacenar los logs*/
+    // Creación de carpeta 'registros'
+    char dir[30];
+    mkdir("./registros", 0777);
+
+    // Creación de carpeta para el día actual (donde el programa opera)
+    fechaActual(dir);
+    mkdir(dir, 0777);
+
+    // Actualización del path del programa ( ./registros/log-20-11-2022 )
+    strcpy(logDir, dir);
+    strcpy(pedidosDir, dir);
+    strcpy(estadoDir, dir);
+
+    // Agregado de archivos en cada path
+    strcat(logDir, "/log.txt");
+    strcat(pedidosDir, "/pedidosEntregados.txt");
+    strcat(estadoDir, "/estadoProductos.bin");
+}
 
 Pedido * configurarCatalogo(Pedido * pedidoSemilla) {
     Pedido *aux = NULL;
@@ -380,7 +396,7 @@ int insertarFinal(Nodo **head, Pedido nuevoPedido) {
     for (;ultimo->siguiente;) {
         ultimo=ultimo->siguiente;
     }
-    
+
     aux = crearNodo(nuevoPedido);
     if (aux == NULL) {
         printf("ERROR: No se pudo insertar el nuevo nodo(pedido). funcion:['insertarFinal']\n");
@@ -392,9 +408,9 @@ int insertarFinal(Nodo **head, Pedido nuevoPedido) {
     return 0;
 }
 
-void guardarDatosVentas(int *cantSalchichas, int *cantHamburguesas) {
-    FILE * archivo = fopen(LOG_DIR, "w");
-    
+void guardarDatosVentas(char *path, int *cantSalchichas, int *cantHamburguesas) {
+    FILE * archivo = fopen(path, "w");
+
     if (archivo == NULL) {
         printf("ERROR: No se pudo abrir el archivo log.txt...");
         system("pause");
@@ -433,7 +449,7 @@ int mostrarPedidos(Nodo * head) {
         if (actual->pedido.hamburguesa.cantidad != 0) {
             printf("\nHamburguesas: %d", actual->pedido.hamburguesa.cantidad);
         }
-        
+
         actual = actual->siguiente;
     }
 
