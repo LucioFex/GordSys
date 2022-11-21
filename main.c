@@ -54,7 +54,7 @@ Nodo * buscarPedido(Nodo *cabeza, int id) ;
 int eliminarPedido(Nodo **cabeza, int id);
 void cargarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza);
 void actualizarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza);
-void fechaActual(char *fecha);
+void dirFecha(char *fecha);
 void gestionDir(char *logDir, char *pedidosDir, char *estadoDir, char *listaPedidosDir);
 
 int main() {
@@ -222,7 +222,6 @@ void finalizarPedido(char *path, Nodo **cabeza, EstadoProductos *estadoProductos
     pedido = buscarPedido(*cabeza, busquedaId);
     if (pedido == NULL) {
         printf("No se encontro el pedido especificado.\n");
-        system("pause");
         return;
     }
 
@@ -246,7 +245,6 @@ void finalizarPedido(char *path, Nodo **cabeza, EstadoProductos *estadoProductos
     // Luego de guardar el pedido en el registro, lo elimino de la lista.
     if (eliminarPedido(cabeza, busquedaId) == 1) {
         printf("No se ha encontrado el pedido que deseaba eliminar. funcion:['finalizarPedido]");
-        system("pause");
         return; //Si no se pudo eliminar, retorno para evitar modificar los estados mas adelante
     }
 
@@ -356,7 +354,7 @@ void actualizarBackup(char *archivoEstados, char *archivoPedidos, EstadoProducto
     fclose(binPedidos);
 }
 
-void fechaActual(char *dir) {
+void dirFecha(char *dir) {
     /* Formatea un String con la fecha actual */
     time_t tiempo = time(NULL);
     struct tm tm = *localtime(&tiempo); //Guardo la fecha local en la var ´tm´
@@ -373,7 +371,7 @@ void gestionDir(char *logDir, char *pedidosDir, char *estadoDir, char *listaPedi
     mkdir("./registros");
 
     // Creación de carpeta correspondiente al día actual (donde el programa crea los archivos)
-    fechaActual(dir);
+    dirFecha(dir);
     mkdir(dir);
 
     // Agego la nueva raiz del programa ( ./registros/log-20-11-2022 )
