@@ -4,13 +4,14 @@
 #include <time.h>
 #include <sys/stat.h>
 
+
 #define PRECIO_SALCHICHA 340
 #define PRECIO_HAMBURGUESA 1349
 #define ID_SALCHICHA 101
 #define ID_HAMBURGUESA 102
 
 typedef struct {
-    int id; // Cada producto ya tiene un id definido
+    int id; // Cada producto tendra un id definido previamente
     char nombre[30];
     float precio;
     int cantidad;
@@ -23,7 +24,7 @@ typedef struct {
     producto hamburguesa;
 } Pedido;
 
-typedef struct { // Struct para hacer un backup de los datos temporales en un archivo binario
+typedef struct { // Struct para almacenar varias variables comodamente
     int cantPedidos;
     int pedidosPreparandose;
     int productosEntregados;
@@ -48,11 +49,11 @@ Pedido * configurarMenu(Pedido * pedidoSemilla);
 Nodo * crearNodo(Pedido pedido);
 int insertarFinal(Nodo **cabeza, Pedido nuevoPedido);
 void guardarDatosVentas(char *path, int *cantSalchichas, int *cantHamburguesas);
-int mostrarPedidos(Nodo * cabeza);
-Nodo * buscarPedido(Nodo * cabeza, int id) ;
-int eliminarPedido(Nodo ** cabeza, int id);
-void cargarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza); // Datos del día en el binario
-void actualizarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza);
+int mostrarPedidos(Nodo *cabeza);
+Nodo * buscarPedido(Nodo *cabeza, int id) ;
+int eliminarPedido(Nodo **cabeza, int id);
+void cargarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza);
+void actualizarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza);
 void fechaActual(char *fecha);
 void gestionDir(char *logDir, char *pedidosDir, char *estadoDir, char *listaPedidosDir);
 
@@ -62,17 +63,16 @@ int main() {
     EstadoProductos * estadoProductos = NULL;
     char logDir[60], pedidosDir[60], estadoDir[60], listaPedidosDir[65];
 
-    // Asignación de memoria dinámica
-    estadoProductos = (EstadoProductos*)malloc(sizeof(*estadoProductos));
+    // Creacion de la estructura local de estados
+    estadoProductos = (EstadoProductos*)malloc(sizeof(EstadoProductos));
     if (estadoProductos == NULL) {
         printf("ERROR: Al asignar espacio en memoria. funcion:['main']\n");
         system("pause");
         return EXIT_FAILURE;
     }
 
-    gestionDir(logDir, pedidosDir, estadoDir, listaPedidosDir);
-    cargarBinarios(estadoDir, listaPedidosDir, estadoProductos, &cabeza);
-    // Cargo los estados del archivo bin en mi struct local
+    gestionDir(logDir, pedidosDir, estadoDir, listaPedidosDir); //Creacion del directorio para guardar los reportes del dia
+    cargarBackup(estadoDir, listaPedidosDir, estadoProductos, &cabeza); // Cargo el backup de los estados y la lista de pedidos
 
     Pedido * pedidoSemilla = NULL, * aux = NULL;
     aux = configurarMenu(pedidoSemilla);
@@ -107,11 +107,11 @@ int main() {
             case 1:
                 ingresarPedido(&cabeza, *pedidoSemilla, estadoProductos);
                 guardarDatosVentas(logDir, &estadoProductos->cantSalchichas, &estadoProductos->cantHamburguesas);
-                actualizarBinarios(estadoDir, listaPedidosDir, estadoProductos, &cabeza);
+                actualizarBackup(estadoDir, listaPedidosDir, estadoProductos, &cabeza);
                 break;
             case 2:
                 finalizarPedido(pedidosDir, &cabeza, estadoProductos);
-                actualizarBinarios(estadoDir, listaPedidosDir, estadoProductos, &cabeza);
+                actualizarBackup(estadoDir, listaPedidosDir, estadoProductos, &cabeza);
                 break;
             case 3:
                 emitirReporte(estadoProductos);
@@ -158,7 +158,7 @@ void ingresarPedido(Nodo **cabeza, Pedido nuevoPedido, EstadoProductos *estadoPr
                 nuevoPedido.salchicha.cantidad += bufferSalchichas;
                 flag=1;
                 break;
-            
+
             case 2:
                 system("cls");
                 printf("Ingrese la cantidad de hamburguesas: ");
@@ -166,7 +166,7 @@ void ingresarPedido(Nodo **cabeza, Pedido nuevoPedido, EstadoProductos *estadoPr
                 nuevoPedido.hamburguesa.cantidad += bufferHamburguesas;
                 flag=1;
                 break;
-            
+
             default:
                 printf("\nLa opcion ingresada no es valida...\n");
                 strcpy(opcion, "s");
@@ -218,14 +218,14 @@ void finalizarPedido(char *path, Nodo **cabeza, EstadoProductos *estadoProductos
     scanf("%d", &busquedaId);
 
     // Si no encontro ningun pedido con ese id retorna NULL, sino, retorna el
-    // Nodo con ese id y lo guardo en la var 'pedido'
+    // Nodo correspondiente y lo guarda en la var 'pedido'
     pedido = buscarPedido(*cabeza, busquedaId);
     if (pedido == NULL) {
         printf("No se encontro el pedido especificado.\n");
         system("pause");
         return;
     }
-    
+
     // Si se encontro un pedido con ese ID, guardo los datos de la venta
     // en el archivo Entregados.txt antes de eliminarlos de la lista
     archivo = fopen(path, "a");
@@ -235,7 +235,7 @@ void finalizarPedido(char *path, Nodo **cabeza, EstadoProductos *estadoProductos
         return;
     }
 
-    fprintf(archivo, "---Pedido %d---\n", pedido->pedido.id); // guardo el pedido a eliminar en el archivo pedidosEntregados.txt
+    fprintf(archivo, "---Pedido %d---\n", pedido->pedido.id);
     fprintf(archivo, "\nSalchichas: %d a $%.2f c/u", pedido->pedido.salchicha.cantidad, pedido->pedido.salchicha.precio);
     fprintf(archivo, "\nHamburguesas: %d a $%.2f c/u\n\n", pedido->pedido.hamburguesa.cantidad, pedido->pedido.hamburguesa.precio);
     fclose(archivo);
@@ -248,7 +248,7 @@ void finalizarPedido(char *path, Nodo **cabeza, EstadoProductos *estadoProductos
         printf("No se ha encontrado el pedido que deseaba eliminar. funcion:['finalizarPedido]");
         system("pause");
         return; //Si no se pudo eliminar, retorno para evitar modificar los estados mas adelante
-    } 
+    }
 
     // Actualizo los estados, luego de asegurarme que se elimino el pedido correctamente
     estadoProductos->pedidosPreparandose -= 1;
@@ -273,7 +273,7 @@ void emitirReporte(EstadoProductos *estadoProductos) {
 int salir() {
     char respuesta[2];
 
-    printf("Esta seguro que desea salir? S/N");
+    printf("Esta seguro que desea salir? S/N: ");
     fflush(stdin);
     gets(respuesta);
 
@@ -288,12 +288,13 @@ int salir() {
 
 //HELPERS - HELPERS -HELPERS - HELPERS
 
-void cargarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza) {
+void cargarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza) {
     FILE * binEstados = fopen(archivoEstados, "rb");
     FILE * binPedidos = fopen(archivoPedidos, "rb");
     Pedido pedidoBuffer;
 
     // Revisión archivo binario pedidos
+    //Si existe un archivo backup de la lista, leo cada pedido(struct) que tenga guardado y los voy insertando, recuperando de esta manera la lista
     if (binPedidos == NULL) {
         fclose(binPedidos);
     } else if (binPedidos != NULL) {
@@ -303,9 +304,9 @@ void cargarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos 
         fclose(binPedidos);
     }
 
-    // Revisión archivo binario estados 
+    // Revisión archivo binario estados
     if (binEstados == NULL) { // Archivo no existe/primera vez que se abre negocio en el día
-        // Cargo los estados del archivo bin en mi struct loca
+        // Entonces no voy a leer los datos del archivo, cargo en 0 los estados en  mi struct local
         fclose(binEstados);
         binEstados = fopen(archivoEstados, "wb");
 
@@ -316,37 +317,36 @@ void cargarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos 
         estadoProductos->cantSalchichas = 0;
         estadoProductos->cantHamburguesas = 0;
 
-        fwrite(estadoProductos, sizeof(*estadoProductos), 1, binEstados);
+        fwrite(estadoProductos, sizeof(*estadoProductos), 1, binEstados); // Las var creadas en 0 las cargo al file para luego poder modificarlas
         fclose(binEstados);
         return;
     }
 
-    // Si el archivo ya existe, se guardan todos sus datos en "estadoProductos"
+    // Si el archivo ya existe, lo lee y se guardan todos sus datos en "estadoProductos"
     fread(estadoProductos, sizeof(*estadoProductos), 1, binEstados);
     fclose(binEstados);
-} 
+}
 
-void actualizarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza) {
-    /* Se guardan todos los datos de la estructura 'estadoProductos' en binario*/
+void actualizarBackup(char *archivoEstados, char *archivoPedidos, EstadoProductos *estadoProductos, Nodo **cabeza) {
     FILE * binEstados = fopen(archivoEstados, "wb");
     FILE * binPedidos = fopen(archivoPedidos, "wb");
 
-    // Revisión archivo binario estados
-    if (binEstados == NULL) { // Validación
+    //Archivo Estados
+    if (binEstados == NULL) { // Valido que exista el archivo a attualizar
         printf("ERROR: No se han podido almacenar los datos en archivo BackUp estado de productos. funcion:['actualizarBinarios']");
         system("pause");
     } else if (binEstados != NULL) {
-        fwrite(estadoProductos, sizeof(*estadoProductos), 1, binEstados);
+        fwrite(estadoProductos, sizeof(*estadoProductos), 1, binEstados); // Escribo la estructura Estados en el binario
     }
 
-    // Revisión archivo binario pedidos
+    // Archivo Pedidos
     if (binPedidos == NULL) {
         printf("ERROR: No se han podido almacenar los datos en archivo BackUp pedidos. funcion:['actualizarBinarios']");
         system("pause");
     } else if (binPedidos != NULL) {
         Nodo *aux = *cabeza;
 
-        while(aux != NULL) {
+        while(aux != NULL) { //Sobreescribo sobre el archivo toda la lista enlazada ya actualizada
             fwrite(&aux->pedido, sizeof(Pedido), 1, binPedidos);
             aux = aux->siguiente;
         }
@@ -359,30 +359,30 @@ void actualizarBinarios(char *archivoEstados, char *archivoPedidos, EstadoProduc
 void fechaActual(char *dir) {
     /* Formatea un String con la fecha actual */
     time_t tiempo = time(NULL);
-    struct tm tm = *localtime(&tiempo);
+    struct tm tm = *localtime(&tiempo); //Guardo la fecha local en la var ´tm´
 
-    // Se actualiza la variable "dir" con los datos del día de hoy
+    // Actualizo la variable "dir" con los datos del día de hoy
     // %d-%02d-%02d
-    sprintf(dir, "./registros/log-%02d-%02d-%d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900); 
+    sprintf(dir, "./registros/log-%02d-%02d-%d", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
 }
 
 void gestionDir(char *logDir, char *pedidosDir, char *estadoDir, char *listaPedidosDir) {
-    /* Asigna una caperta en 'registro' para el día actual, para almacenar los logs*/
+    /* Asigna una carpeta en 'registros' para el día actual donde guardara los archivos de ese dia*/
     // Creación de carpeta 'registros'
     char dir[30];
-    mkdir("./registros", 0777);
+    mkdir("./registros");
 
-    // Creación de carpeta para el día actual (donde el programa opera)
+    // Creación de carpeta correspondiente al día actual (donde el programa crea los archivos)
     fechaActual(dir);
-    mkdir(dir, 0777);
+    mkdir(dir);
 
-    // Actualización del path del programa ( ./registros/log-20-11-2022 )
+    // Agego la nueva raiz del programa ( ./registros/log-20-11-2022 )
     strcpy(logDir, dir);
     strcpy(pedidosDir, dir);
     strcpy(estadoDir, dir);
     strcpy(listaPedidosDir, dir);
 
-    // Agregado de archivos en cada path
+    // Especifico la direccion de cada archivo
     strcat(logDir, "/log.txt");
     strcat(pedidosDir, "/pedidosEntregados.txt");
     strcat(estadoDir, "/estadoProductos.bin");
@@ -445,7 +445,7 @@ int insertarFinal(Nodo **cabeza, Pedido nuevoPedido) {
         aux = crearNodo(nuevoPedido);
         if (aux == NULL) {
             // Verifico que no haya fallado la funcion crearNodo,
-            // si devolvio NULL fallo y termino aca la funcion, no podre insertar el nuevo nodo
+            // si devolvio NULL fallo y termino aca la funcion, no podre insertar en la lista
             printf("ERROR: No se pudo insertar el nuevo nodo(pedido). funcion:['insertarFinal']\n");
             system("pause");
             // Si fallo la creación del nodo retorno 1, para avisar al 'mundo exterior' que la funcion no logro insertar el pedido
@@ -472,7 +472,7 @@ int insertarFinal(Nodo **cabeza, Pedido nuevoPedido) {
 
     ultimo->siguiente = crearNodo(nuevoPedido);
     return 0; // Si llego hasta aca no hubo fallas y el pedido se inserto
-              // en la lista correctamente. Retorno 0 como aviso.
+              // en la lista correctamente. Retorno 0 como flag.
 }
 
 void guardarDatosVentas(char *path, int *cantSalchichas, int *cantHamburguesas) {
@@ -483,7 +483,6 @@ void guardarDatosVentas(char *path, int *cantSalchichas, int *cantHamburguesas) 
         system("pause");
         return;
     }
-
 
     // Recibe la cantidad de cada producto que se vendieron y lo guarda en el
     // archivo log el cual almacen las ventas totales del dia
@@ -555,8 +554,8 @@ int eliminarPedido(Nodo ** cabeza, int id) {
         return 0;
     } else if (actual->pedido.id != id) {
         for(;actual->siguiente;) {
-            if (actual->siguiente->pedido.id == id) { // ya parto buscando desde la 2da pos, la 1ra ya fue revisada.
-                actual->siguiente = actual->siguiente->siguiente; // Si el nodo sucesor tiene el id que busco, hago que el nodo actual apunte al siguiente del siguiente, osea lo saltea, elimininandolo del enlace.
+            if (actual->siguiente->pedido.id == id) { // ya parto buscando desde la 2da, la 1ra ya fue revisada, por eso estoy 1 pos desfazado. Si el nodo sucesor tiene el id que busco entonces:
+                actual->siguiente = actual->siguiente->siguiente; // Hago que el nodo actual apunte al siguiente del siguiente, osea lo saltea, elimininandolo del enlace.
                 free(actual->siguiente);
                 return 0;
             }
