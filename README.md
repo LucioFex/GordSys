@@ -5,7 +5,7 @@
 </h1>
 
 ## Concepto general
-#### GordSys es un sistema de facturación de comida rápida `con fines didácticos`. El propósito del proyecto es complementar los estudios de alumnos en carreras asociadas a la informática en principios de carrera.
+#### GordSys es un sistema de facturación de comida rápida `con fines educativos`. El propósito del proyecto es complementar los estudios de alumnos en carreras asociadas a la informática en principios de carrera.
 
 ## Lenguaje de programación utilizado: `C` (No se usan bases de datos)
 
